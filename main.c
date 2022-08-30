@@ -107,7 +107,7 @@ struct EQUATION *fix_tree(struct EQUATION *eq){
 		}
 	}
   for (i=0; i<(eq->TOTAL_CHILD); ++i){
-  	fix_tree(eq->CHILD[i]);
+  	 fix_tree(eq->CHILD[i]);
   }
   return eq;
 }
@@ -139,7 +139,11 @@ int is_var_grp(struct EQUATION *eq){
 	}
 	return ans;
 }
-
+void p(struct EQUATION *eq){
+	print_equation(eq);
+	printf("\n");	
+}
+int dummy=0;
 struct EQUATION *distribute(struct EQUATION *eq){
   int i, j;
   float mul;
@@ -169,12 +173,12 @@ A:
               	eq->CHILD[i]->CHILD[j]->CHILD[0]->CONSTANT *= mul;
               }
             }
+            
             for (j=0; j<eq->TOTAL_CHILD; ++j)
           if (eq->CHILD[j]->OPERATION == 0)
             remove_child(eq, j);
         if (eq->TOTAL_CHILD == 1) {eq = eq->CHILD[0]; return eq;}
             eq->CHILD[i] = distribute(eq->CHILD[i]);
-            goto A;
           }
         }
         for (i=0; i<eq->TOTAL_CHILD; ++i){
@@ -234,19 +238,25 @@ B:
   }
   return eq;
 }
-void p(struct EQUATION *eq){
-	print_equation(eq);
-	printf("\n");	
+void solve(struct EQUATION *eq){
+	int i, j;
+	for (i=0; i<5; ++i){
+		for (j=0; j<5; ++j){
+			eq = fix_tree(eq);
+		}
+		eq = distribute(eq);
+	}
+	p(eq);
 }
 int main (){
 	struct EQUATION *x;
 	struct EQUATION *y;
+	struct EQUATION *u;
 	y = make_variable();
 	y = operate_equation(ADD, make_number(2.0f), y);
-	x = operate_equation(ADD, make_number(3.0f), make_number(2.0f));
-	x = operate_equation(MULTIPLY, x, y);
-	x = operate_equation(MULTIPLY, x, make_number(2.0f));
-	x = fix_tree(x);
-  x =	distribute(x);
-  p(x);
+	x = operate_equation(ADD, make_number(1.0f), make_number(2.0f));
+	x = operate_equation(ADD, x, y);
+	u = operate_equation(ADD, make_number(10.0f), make_number(10.0f));
+	x = operate_equation(MULTIPLY, x, u);
+	solve(x);
 }
