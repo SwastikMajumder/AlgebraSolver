@@ -63,9 +63,52 @@ void print_equation(struct EQUATION *eq){
 		printf(")");
 	}
 }
+struct EQUATION *do_copy(struct EQUATION *eq){
+	int i;
+	struct EQUATION *output = malloc(sizeof(struct EQUATION));
+	output->TOTAL_CHILD = eq->TOTAL_CHILD;
+	output->OPERATION = eq->OPERATION;
+	output->CONSTANT = eq->CONSTANT;
+	memcpy(output->POWER, eq->POWER, sizeof(int)*VM);
+	for (i=0; i<eq->TOTAL_CHILD; ++i){
+		output->CHILD[i] = do_copy(eq->CHILD[i]);
+	}
+	return output;
+}
+void add_child(struct EQUATION *eq, struct EQUATION *child){
+  eq->CHILD[(eq->TOTAL_CHILD)++] = do_copy(child);
+}
+
+void remove_child(struct EQUATION *eq, int n){
+  int i;
+  for (i=n;i<(eq->TOTAL_CHILD)-1; ++i){
+    eq->CHILD[i]=eq->CHILD[i+1];
+  }
+  eq->CHILD[--(eq->TOTAL_CHILD)] = 0;
+}
+
+struct EQUATION *operate_equation(int operation, struct EQUATION *eq1, struct EQUATION *eq2){
+	struct EQUATION *output = (struct EQUATION *)malloc(sizeof(struct EQUATION));
+	memset(output, 0, sizeof(struct EQUATION));
+	output->OPERATION = operation;
+	output->CHILD[0] = do_copy(eq1);
+	output->CHILD[1] = do_copy(eq2);
+	output->TOTAL_CHILD=2;
+	return output;
+}
 void p(struct EQUATION *eq){
 	print_equation(eq);
 	printf("\n");	
+}
+int isdiv(struct EQUATION *eq){
+	int i;
+	if (eq->OPERATION == EXPONENT && eq->CHILD[1]->OPERATION == VARIABLE && approx(eq->CHILD[1]->CONSTANT, -1.0f)){
+		for (i=0; i<VM; ++i){
+			if (eq->CHILD[1]->POWER[i] != 0) break;
+		}
+		if (i == VM) return 1;
+	}
+	return 0;
 }
 struct EQUATION *make_variable(int id, float constant, int power){
 	struct EQUATION *output = (struct EQUATION *)malloc(sizeof(struct EQUATION));
@@ -82,39 +125,32 @@ struct EQUATION *make_number(float constant){
 }
 int ranger=0;
 
-struct EQUATION *operate_equation(int operation, struct EQUATION *eq1, struct EQUATION *eq2){
-	struct EQUATION *output = (struct EQUATION *)malloc(sizeof(struct EQUATION));
-	memset(output, 0, sizeof(struct EQUATION));
-	output->OPERATION = operation;
-	output->CHILD[0] = eq1;
-	output->CHILD[1] = eq2;
-	output->TOTAL_CHILD=2;
-	return output;
-}
-
-struct EQUATION *do_copy(struct EQUATION *eq){
-	int i;
-	struct EQUATION *output = malloc(sizeof(struct EQUATION));
-	output->TOTAL_CHILD = eq->TOTAL_CHILD;
-	output->OPERATION = eq->OPERATION;
-	output->CONSTANT = eq->CONSTANT;
-	memcpy(output->POWER, eq->POWER, sizeof(int)*VM);
-	for (i=0; i<eq->TOTAL_CHILD; ++i){
-		output->CHILD[i] = do_copy(eq->CHILD[i]);
-	}
-	return output;
-}
-
-void add_child(struct EQUATION *eq, struct EQUATION *child){
-  eq->CHILD[(eq->TOTAL_CHILD)++] = do_copy(child);
-}
-
-void remove_child(struct EQUATION *eq, int n){
-  int i;
-  for (i=n;i<(eq->TOTAL_CHILD)-1; ++i){
-    eq->CHILD[i]=eq->CHILD[i+1];
-  }
-  eq->CHILD[--(eq->TOTAL_CHILD)] = 0;
+struct EQUATION *unite(struct EQUATION *eq){
+		struct EQUATION *st1;
+		int i;
+	st1=	malloc(sizeof(struct EQUATION));
+	st1->TOTAL_CHILD = 0;
+	st1->OPERATION = MULTIPLY;
+		int count=0;
+		for (i=0; i<eq->TOTAL_CHILD; ++i){
+	    if (isdiv(eq->CHILD[i])){
+	    	add_child(st1, eq->CHILD[i]->CHILD[0]);
+	    	count = 1;
+	    }
+		}
+		for (i=0; i<eq->TOTAL_CHILD; ++i){
+	    if (isdiv(eq->CHILD[i])){
+	    	remove_child(eq, i);
+	    	--i;
+	    }
+		}
+		if (count){
+		 add_child(eq, operate_equation(EXPONENT, st1, make_number(-1.0f)));
+		}
+		for (i=0; i<eq->TOTAL_CHILD; ++i)
+  		if (eq->CHILD[i]->TOTAL_CHILD == 1) eq->CHILD[i]=eq->CHILD[i]->CHILD[0];
+  	if (eq->TOTAL_CHILD == 1) eq = eq->CHILD[0];
+		return eq;
 }
 
 struct EQUATION *shift_up(struct EQUATION *eq, int n){
@@ -144,7 +180,36 @@ struct EQUATION *fix_tree(struct EQUATION *eq){
   }
   return eq;
 }
-
+struct EQUATION *cross(struct EQUATION *eq){
+	int i, j, k;
+	struct EQUATION *output;
+	output = malloc(sizeof(struct EQUATION));
+	output->TOTAL_CHILD = 0;
+	output->OPERATION = MULTIPLY;
+	if (eq->OPERATION == ADD){
+	  for(i=0; i<eq->TOTAL_CHILD; ++i){
+	  	if (eq->CHILD[i]->OPERATION != MULTIPLY){
+	  		add_child(eq, operate_equation(MULTIPLY, make_number(1.0f), eq->CHILD[i]));
+	  		remove_child(eq, i);
+	  		--i;
+	  	}
+	  }
+	  for (i=0; i<eq->TOTAL_CHILD; ++i)
+	  	for (j=0; j<eq->CHILD[i]->TOTAL_CHILD; ++j)
+	  	  if (isdiv(eq->CHILD[i]->CHILD[j]))
+	  	      add_child(output, eq->CHILD[i]->CHILD[j]->CHILD[0]);
+	  for (k=0; k<eq->TOTAL_CHILD; ++k)
+	    for (i=0; i<eq->TOTAL_CHILD; ++i)
+  	  	for (j=0; j<eq->CHILD[i]->TOTAL_CHILD; ++j)
+  	  	  if (isdiv(eq->CHILD[i]->CHILD[j]))
+	  	      if (i!=k) add_child(eq->CHILD[k], eq->CHILD[i]->CHILD[j]->CHILD[0]);
+    for (i=0; i<eq->TOTAL_CHILD; ++i)
+	  	for (j=0; j<eq->CHILD[i]->TOTAL_CHILD; ++j)
+	  	  if (isdiv(eq->CHILD[i]->CHILD[j]))
+	  	      remove_child(eq->CHILD[i], j);
+	}
+  return operate_equation(MULTIPLY, eq, operate_equation(EXPONENT, output, make_number(-1.0f)));
+}
 int dummy=0;
 
 int k2(int x){
@@ -188,17 +253,29 @@ struct EQUATION *ok(struct EQUATION *eq, int n){
 }
 
 struct EQUATION *distribute(struct EQUATION *eq){
+	eq=fix_tree(eq);
+	eq=fix_tree(eq);
+	eq=fix_tree(eq);
 	int i;
 	int j;
 	int k;
 	struct EQUATION *output;
 	struct EQUATION *output_2 = malloc(sizeof(struct EQUATION));
 	int tt = (int)pow(PO, VM);
-	if (eq->OPERATION == EXPONENT){
-		eq->CHILD[0] = distribute(eq->CHILD[0]);
-		return eq;
-	}
 	if (eq->OPERATION == MULTIPLY){
+		eq = unite(eq);
+		for (i=0; i<eq->TOTAL_CHILD; ++i){
+			if (isdiv(eq->CHILD[i])){
+			   struct EQUATION *div = do_copy(eq->CHILD[i]);
+		    remove_child(eq, i);
+		    if (eq->TOTAL_CHILD == 1) eq=eq->CHILD[0];
+		    eq=fix_tree(eq);
+		    eq=fix_tree(eq);
+		    eq = distribute(eq);
+		    div->CHILD[0] = distribute(div->CHILD[0]);
+		    return operate_equation(MULTIPLY, eq, div);
+			}
+		}
 		for (i=0; i<eq->TOTAL_CHILD; ++i){
 			if (eq->CHILD[i]->OPERATION == ADD) break;
 		}
@@ -242,6 +319,23 @@ struct EQUATION *distribute(struct EQUATION *eq){
 		}
 	}
 	else if (eq->OPERATION == ADD){
+		for (i=0; i<eq->TOTAL_CHILD; ++i){
+			eq->CHILD[i] = unite(eq->CHILD[i]);
+		}
+		int iscross=0;
+		for (i=0; i<eq->TOTAL_CHILD; ++i){
+			if (isdiv(eq->CHILD[i])) iscross = 1;
+			if (eq->CHILD[i]->OPERATION == MULTIPLY)
+			  for (j=0; j<eq->CHILD[i]->TOTAL_CHILD; ++j)
+			  	if (isdiv(eq->CHILD[i]->CHILD[j])){
+			  	  iscross = 1;
+			  	}
+		}
+		if (iscross){
+			eq = cross(eq);
+			eq = distribute(eq);
+			return eq;
+		}
 		output = malloc(sizeof(struct EQUATION));
 	  output->TOTAL_CHILD = 0;
 	  output->OPERATION = ADD;
@@ -250,6 +344,7 @@ struct EQUATION *distribute(struct EQUATION *eq){
 				eq->CHILD[i] = distribute(eq->CHILD[i]);
 			}
 		}
+		eq = fix_tree(eq);
 		eq = fix_tree(eq);
 		for (i=0; i<tt; ++i){
 			float sum=0.0f;
@@ -314,7 +409,7 @@ int same(struct EQUATION *eq1, struct EQUATION *eq2){
 	}
 	return 1;
 }
-
+/*
 struct EQUATION *common(struct EQUATION *eq){
 	int i, j;
 	if (eq->OPERATION == MULTIPLY){
@@ -331,10 +426,38 @@ struct EQUATION *common(struct EQUATION *eq){
   }
 	return eq;
 }
+struct EQUATION *common2(struct EQUATION *eq){
+	int i;
+	int j;
+	int k;
+	struct EQUATION *rec;
+	if (eq->OPERATION == ADD){
+		for (i=0; i<eq->TOTAL_CHILD; ++i){
+			if (eq->CHILD[i]->OPERATION == MULTIPLY){
+				for (j=0; j<eq->CHILD[i]->TOTAL_CHILD; ++j){
+					rec = eq->CHILD[i]->CHILD[j];
+					for (k=0; k<eq->CHILD[i]->TOTAL_CHILD; ++k){
+					}
+			  		if (j != k && eq->CHILD[i]->CHILD[j]->OPERATION == EXPONENT && approx(eq->CHILD[i]->CHILD[j]->CHILD[1], -1.0f) && eq->CHILD[i]->CHILD[k]->OPERATION == EXPONENT && approx(eq->CHILD[i]->CHILD[k]->CHILD[1], -1.0f)){
+		  			}
+					for (k=0; k<eq->CHILD[i]->TOTAL_CHILD; ++k){
+			  		if (j != k && eq->CHILD[i]->CHILD[j]->OPERATION == EXPONENT && approx(eq->CHILD[i]->CHILD[j]->CHILD[1], -1.0f)){
+			  			if (same(eq->CHILD[i]->CHILD[j]->CHILD[0], eq->CHILD[i]->CHILD[k]->CHILD[0])){
+			  				remove_child(eq->CHILD[])
+			  			}
+		  			}
+					}
+				}
+			}
+	}
+}
+*/
+
+
 
 #define m(x, y) operate_equation(MULTIPLY, x, y)
 #define a(x, y) operate_equation(ADD, x, y)
-#define w(x) operate_equation(EXPONENT, x, make_number(-1.0f))
+#define w(x, y) operate_equation(EXPONENT, x, y)
 #define n(x) make_number(x)
 void solve(struct EQUATION *eq){
 	int i, j;
@@ -351,17 +474,13 @@ int main (){
 	struct EQUATION *y;
 	struct EQUATION *u;
 	x = make_variable(0, 1.0f, 1);
-	x = w(x);
-	x = m(x, x);
-	x = m(x, x);
+	//x = a(w(m(w(x, n(-1.0f)),a(x, n(1.0f))), n(-1.0f)), w(a(x, n(2.0f)), n(-1.0f)));
+	//x = m(x, x);
+	x = w(x, n(-1.0f));
+	x = a(m(x, x), x);
 	p(x);
-	x = fix_tree(x);
-	x = fix_tree(x);
-	x = common(x);
-	x = common(x);
-	x = common(x);
-	x = fix_tree(x);
-	x = fix_tree(x);
+//	x = cross(x);
+//	p(x);
 	x = distribute(x);
 	p(x);
 }
