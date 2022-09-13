@@ -236,10 +236,7 @@ struct EQUATION *distribute(struct EQUATION *eq){
 	int iscross=0;
 	if (eq->OPERATION == ADD){
 		for (i=0; i<eq->TOTAL_CHILD; ++i){
-		  if (isdiv(eq->CHILD[i])) iscross = 1;
-			else if (eq->CHILD[i]->OPERATION == MULTIPLY)
-  			for (j=0; j<eq->CHILD[i]->TOTAL_CHILD; ++j)
-  				if (isdiv(eq->CHILD[i])) iscross = 1;
+		  if (isfrac(eq->CHILD[i])) iscross = 1;
 		}
 	}
 	if (iscross){
@@ -388,11 +385,11 @@ int main (){
 	struct EQUATION *y;
 	struct EQUATION *u;
 	x = make_variable(0, 1.0f, 1);
+	x = a(m(x, w(a(x, n(1.0f)), n(-1.0f))), m(x, w(a(x, n(2.0f)), n(-1.0f))));
 	//y = make_variable(1, 1.0f, 1);
 	//y = w(a(x, n(1.0f)), n(-1.0f));
 	//x = a(y, w(x, n(-1.0)));
-	x=a(x, w(x, n(-1.0f)));
-  p(x);
+ p(x);
 	x = distribute(x);
   p(x);
 }
