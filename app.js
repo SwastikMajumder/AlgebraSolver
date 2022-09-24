@@ -559,12 +559,12 @@ function search(eq, depth){
 	if (is_same(eq, target)){
 		return [eq];
 	}
-	if (depth == 7) return -1;
+	if (depth == 6) return -1;
 	search_list = [];
 	if (depth == 1) search_list.push(fix_tree_recursive(do_copy(eq)));
 	if (depth == 2) all_possible_tree_fold(do_copy(eq), tree_fold_depth(eq));
-	if (depth == 0 || depth == 3 || depth == 6) use_formula(do_copy(eq));
-	if (depth == 4 || depth == 5) search_list.push(constant_doer_2(do_copy(eq)));
+	if (depth == 0 || depth == 3 || depth == 5) use_formula(do_copy(eq));
+	if (depth == 4) search_list.push(constant_doer_2(do_copy(eq)));
 	var search_list_curr = [];
 	for (var i=0; i<search_list.length; ++i) search_list_curr.push(search_list[i]);
 	search_list_curr = remove_duplicate(search_list_curr);
@@ -582,9 +582,11 @@ function search(eq, depth){
 
 var x = make_variable("x");
 target = a( w(x, n(2)),  a( m(n(3), x), n(2) ) );
-p(target);
 x = m(a(x, n(1)), a(x, n(2)));
+console.log("Start From:");
 p(x);
+console.log("Target:");
+p(target);
 console.log();
 var pv = search(do_copy(x), 0);
 if (pv != -1) for (var i=0; i<pv.length; ++i) p(pv[i]);
