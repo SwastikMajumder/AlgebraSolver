@@ -217,12 +217,23 @@ function formula_list_gen(){
 	formula_output[0].push(n(1));
 	formula_input[0].push(m(v_a, v_a));
 	formula_output[0].push(w(v_a, n(2)));
+
 	formula_input[1].push(a(v_a, m(v_a, v_b)));
 	formula_output[1].push(m(v_a, a(n(1), v_b)));
+	formula_input[1].push(m(v_a, w(v_a, v_b)));
+	formula_output[1].push(w(v_a, a(v_b, n(1))));
+	formula_input[1].push(a(w(v_a, n(-1)), v_b));
+	formula_output[1].push(m(a(n(1), m(v_a, v_b)),w(v_a, n(-1))));
+	
+	formula_input[2].push(w(w(v_a, v_b), v_c));
+	formula_output[2].push(w(v_a, m(v_b, v_c)));
+	formula_input[2].push(m(w(v_a, v_b), w(v_a, v_c)));
+	formula_output[2].push(w(v_a, a(v_b, v_c)));
 	formula_input[2].push(a(m(v_a, v_b), m(v_a, v_c)));
 	formula_output[2].push(m(v_a, a(v_b, v_c)));
 	formula_input[2].push(m(v_a, a(v_b, v_c)));
 	formula_output[2].push(a(m(v_a, v_b), m(v_a, v_c)));
+	
 	formula_input[3].push(m(a(v_a, v_b), a(v_c, v_d)));
 	formula_output[3].push(a(a(m(v_a, v_c), m(v_a, v_d)), a(m(v_b, v_c), m(v_b, v_d))));
 }
@@ -290,6 +301,7 @@ function found_in_tree(eq, inp, out){
 	}
 	return eq;
 }
+
 function use_formula(eq){
 	formula_input = [[], [], [], []];
 	formula_output = [[], [], [], []];
@@ -496,7 +508,7 @@ function remove_duplicate(ary){
 	return ary;
 }
 function is_constant_doer(eq){
-	if (eq.operation != ADD && eq.operation != MULTIPLY && eq.operation != CONSTANT){
+	if (eq.operation != ADD && eq.operation != MULTIPLY && eq.operation != EXPONENT && eq.operation != CONSTANT){
 		return -1;
 	} else {
 		for (var i=0; i<eq.child.length; ++i){
@@ -528,7 +540,16 @@ function constant_doer(eq){
 			}
 		}
 		result = product;
-	} else if (eq.operation == CONSTANT){
+	} else if (eq.operation == EXPONENT){
+		if (eq.child[0].operation == CONSTANT && eq.child[1].operation == CONSTANT)
+			result = Math.pow(eq.child[0].constant, eq.child[1].constant);
+		else if (eq.child[0].operation != CONSTANT && eq.child[1].operation == CONSTANT){
+			result = Math.pow(eq.child[0].constant, constant_doer(eq.child[1]));
+		} else if (eq.child[0].operation == CONSTANT && eq.child[1].operation != CONSTANT){
+			result = Math.pow(constant_doer(eq.child[0]), eq.child[1].constant);
+		}
+	}		
+	else if (eq.operation == CONSTANT){
 		result = eq.constant;
 	}
 	return result;
@@ -555,26 +576,29 @@ function create_collection_2(n){
 }
 var search_list = [];
 var target;
-function search(eq, depth){
+var principle_variation = [];
+function search(eq, depth, brac){
 	if (is_same(eq, target)){
-		return [eq];
+		return 1;
 	}
-	if (depth == 6) return -1;
+	if (depth == 0) return -1;
 	search_list = [];
-	if (depth == 1) search_list.push(fix_tree_recursive(do_copy(eq)));
-	if (depth == 2) all_possible_tree_fold(do_copy(eq), tree_fold_depth(eq));
-	if (depth == 0 || depth == 3 || depth == 5) use_formula(do_copy(eq));
-	if (depth == 4) search_list.push(constant_doer_2(do_copy(eq)));
+	use_formula(do_copy(eq));
+	if (brac == 1){
+		var eq_open = fix_tree_recursive(do_copy(eq));
+		all_possible_tree_fold(do_copy(eq_open), tree_fold_depth(eq_open));
+		brac = 0;
+	} else {
+		brac = 1;
+	}
 	var search_list_curr = [];
-	for (var i=0; i<search_list.length; ++i) search_list_curr.push(search_list[i]);
+	for (var i=0; i<search_list.length; ++i) search_list_curr.push(constant_doer_2(do_copy(search_list[i])));
 	search_list_curr = remove_duplicate(search_list_curr);
 	for (var i=0; i<search_list_curr.length; ++i){
-		var h = search(do_copy(search_list_curr[i]), depth+1);
-		if (h != -1){
-			var tmp = [];
-			for (var i=0; i<h.length; ++i) tmp.push(do_copy(h[i]));
-			tmp.push(eq);
-			return tmp;
+		var h = search(do_copy(search_list_curr[i]), depth-1, brac);
+		if (h == 1){
+			principle_variation[depth-1] = do_copy(search_list_curr[i]);
+			return 1;
 		}
 	}
 	return -1;
@@ -588,5 +612,10 @@ p(x);
 console.log("Target:");
 p(target);
 console.log();
-var pv = search(do_copy(x), 0);
-if (pv != -1) for (var i=0; i<pv.length; ++i) p(pv[i]);
+const target_depth = 4;
+for (var i=0; i<target_depth; ++i) principle_variation.push(0);
+search(do_copy(x), target_depth, 1);
+for (var i=0; i<principle_variation.length; ++i){
+	if (principle_variation[i] == 0) continue;
+	p(principle_variation[i]);
+}
