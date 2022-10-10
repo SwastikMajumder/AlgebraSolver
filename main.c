@@ -612,27 +612,75 @@ void moveListProc(int *moveListCount, struct EQUATION *moveList[MAX_MOVE_GEN_LIS
 	}
 }
 
-int search(struct EQUATION *eq, struct EQUATION *target, int depth, int *ttCount, struct EQUATION *transpositionTable[MAX_TT_SIZE], struct EQUATION *pv[MAX_DEPTH_PV]){
-	//printEq(target);
-	if (isSame(eq, target)){
-		return 1;	
+struct MATH_STEP {
+	struct MATH_STEP *PARENT;
+	struct EQUATION *DATA;
+};
+
+struct QUEUE_OBJ {
+	struct MATH_STEP *STEP;
+	struct QUEUE_OBJ *NEXT_STEP;
+};
+
+void enqueue(struct QUEUE_OBJ **queueStart, struct QUEUE_OBJ **queueEnd, struct MATH_STEP *added){
+	if (*queueEnd == 0){
+		*queueEnd = malloc(sizeof(struct QUEUE_OBJ));
+		*queueStart = *queueEnd;
+	} else {
+		(*queueEnd)->NEXT_STEP = malloc(sizeof(struct QUEUE_OBJ));
+		*queueEnd = (*queueEnd)->NEXT_STEP;		
 	}
-	if (findInTT(eq, ttCount, transpositionTable)) return 0;
-	else {
-		transpositionTable[(*ttCount)++] = doCopy(eq);
-	}
+	(*queueEnd)->STEP = malloc(sizeof(struct MATH_STEP));
+	memcpy((*queueEnd)->STEP, added, sizeof(struct MATH_STEP));
+	(*queueEnd)->NEXT_STEP = 0;
+}
+
+struct MATH_STEP *dequeue(struct QUEUE_OBJ **queueStart, struct QUEUE_OBJ **queueEnd){
+	struct MATH_STEP *output = malloc(sizeof(struct MATH_STEP));
+	memcpy(output, (*queueStart)->STEP, sizeof(struct MATH_STEP));
+	*queueStart = (*queueStart)->NEXT_STEP;
+	if (*queueStart == 0) *queueEnd = 0;
+	return output;
+}
+
+struct MATH_STEP *search(struct EQUATION *eq, struct EQUATION *target){
+	struct EQUATION *transpositionTable[MAX_TT_SIZE];
+	int ttCount = 0;
+	int i;
 	struct EQUATION *moveList[MAX_MOVE_GEN_LIST_SIZE];
 	int moveListCount = 0;
-	makeList(eq, &moveListCount, moveList);
-	moveListProc(&moveListCount, moveList);
-	int i;
-	//for (i=0; i<moveListCount; ++i) printEq(moveList[i]);
-	for (i=0; i<moveListCount; ++i){
-		struct EQUATION *tmp = doCopy(moveList[i]);
-		//printEq(tmp);
-		if (search(tmp, target, depth-1, ttCount, transpositionTable, pv)){
-			pv[depth] = tmp; 
-			return 1;
+	
+	struct QUEUE_OBJ *queueStart=0;
+	struct QUEUE_OBJ *queueEnd=0;
+	
+	transpositionTable[ttCount++] = doCopy(eq);
+	
+	struct MATH_STEP step;
+	step.PARENT = 0;
+	step.DATA = doCopy(eq);
+	
+	enqueue(&queueStart, &queueEnd, &step);
+	
+	while (queueEnd){
+		struct MATH_STEP *v = dequeue(&queueStart, &queueEnd);
+		
+		if (isSame(v->DATA, target)){
+			return v;
+		}
+		
+		memset(moveList, 0, sizeof(struct EQUATION *)*MAX_MOVE_GEN_LIST_SIZE);
+		moveListCount = 0;
+		makeList(v->DATA, &moveListCount, moveList);
+		moveListProc(&moveListCount, moveList);
+		
+		for (i=0; i<moveListCount; ++i){
+			struct EQUATION *w = doCopy(moveList[i]);
+			if (findInTT(w, &ttCount, transpositionTable) == 0){
+				transpositionTable[ttCount++] = doCopy(w);	
+				step.DATA = doCopy(w);
+				step.PARENT = v;
+				enqueue(&queueStart, &queueEnd, &step);
+			}
 		}
 	}
 	return 0;
@@ -702,7 +750,7 @@ void printEquation(struct EQUATION *eq){
 //Print equation with a new line
 void printEq(struct EQUATION *eq){
 	printEquation(eq);
-	printf(" ");
+	printf("\n");
 }
 
 void formulaGen(){
@@ -733,28 +781,19 @@ int main(){
 	formulaGen();	
 	struct EQUATION *start = M(A(V('x'), N(1)), A(V('x'), N(2)));
 	struct EQUATION *target = A(A(W(V('x'), N(2)), M(N(3), V('x'))), N(2));
-	//struct EQUATION *target = A(A(M(V('x'), V('x')), M(V('x'), N(2))), A( M(V('x'), N(1)), N(2)));
 	target = fixCommutative(target);
-	//printEq(target);
 	
 	printf("Start: ");
 	printEq(start);
 	printf("Target: ");
 	printEq(target);
 	printf("\n");
-	printf("(ENDS UP HERE)\n");
-	struct EQUATION *pv[MAX_DEPTH_PV];
-	for (i=0; i<MAX_DEPTH_PV; ++i) pv[i] = 0;
-	struct EQUATION *transpositionTable[MAX_TT_SIZE];
-	int ttCount = 0;
-	search(start, target, 249, &ttCount, transpositionTable, pv);
-	for (i=0; i<MAX_DEPTH_PV; ++i){
-		if (pv[i]){
-			printEq(pv[i]);
-		}
+	
+	struct MATH_STEP *output = search(start, target);
+	while (output){
+		printEq(output->DATA);
+		output = output->PARENT;
 	}
-	printEq(start);
-	printf("\n(STARTS HERE)");
 	
 	return 0;
 }
