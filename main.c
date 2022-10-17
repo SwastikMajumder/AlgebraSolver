@@ -1,3 +1,4 @@
+#include <time.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,22 +9,29 @@
 #define ADD 2
 #define MULTIPLY 3
 #define EXPONENT 4
+#define SINE 5
+#define COSINE 6
+#define COSECANT 7
+#define SECANT 8
+#define TANGENT 9
+#define COTANGENT 10
+#define LAWN 11
 
-#define NOT_A_FUNCTION 0
-#define SINE 1
-#define COSINE 2
-#define COSECANT 3
-#define SECANT 4
-#define TANGENT 5
-#define COTANGENT 6
-#define LAWN 7
-
-//TYPE made by oring function and operation
-#define TYPE_MACRO(op, fx) (((op)<<3)|(fx))
-#define TYPE_MACRO_OP(x) (((x)->TYPE)>>3)
-#define TYPE_MACRO_FX(x) (((x)->TYPE)&0x7)
-
+#define MAX_BRACKET_GROUP 50
+#define MAX_BRACKET_GROUP_LIST_SIZE 200
+#define MAX_LONG_BRACKET 50
+#define MAX_LONG_BRACKET_GEN_LIST 250
+#define TOTAL_FORMULA_COUNT 15
 #define MAX_VARIABLE_IN_FORMULA 4
+#define MAX_MOVE_GEN_LIST_SIZE 200
+#define MAX_TT_SIZE 1000
+
+#define FX(type, x) operateEquation(type, x)
+#define A(x, y) operateEquation2(ADD, x, y)
+#define M(x, y) operateEquation2(MULTIPLY, x, y)
+#define W(x, y) operateEquation2(EXPONENT, x, y)
+#define N(x) makeNumber(x)
+#define V(x) makeVariable(x)
 
 char *functionNameList[] = {"sin", "cos", "cosec", "sec", "tan", "cot", "ln"};
 
@@ -44,135 +52,18 @@ struct EQUATION_SIS {
 	struct EQUATION_SIS *NEXT_CHILD;
 };
 
-#define TOTAL_FORMULA_COUNT 7
+void printEq(struct EQUATION *eq);
 
 struct EQUATION *formulaInputList[TOTAL_FORMULA_COUNT];
 struct EQUATION *formulaOutputList[TOTAL_FORMULA_COUNT];
 
-//Count number of child in an equation
 int equationChildCount(struct EQUATION *eq){
 	int i = 0;
 	struct EQUATION_SIS *sis;
 	while ((i++)?(sis = sis->NEXT_CHILD):(sis = eq->NEXT_CHILD));
 	return i;
 }
-void printEq(struct EQUATION *eq);
-//New copy of an equation
-struct EQUATION *doCopy(struct EQUATION *eq){
-	int i;
-	struct EQUATION *output = malloc(sizeof(struct EQUATION));
-	output->TYPE = eq->TYPE;
-	if (TYPE_MACRO_OP(output) == VARIABLE_TERM){
-		output->VALUE.VARIABLE_NAME = eq->VALUE.VARIABLE_NAME;
-	} else if (TYPE_MACRO_OP(output) == CONSTANT_TERM){
-		output->VALUE.CONSTANT_VALUE = eq->VALUE.CONSTANT_VALUE;
-	}
-	struct EQUATION_SIS *sis;
-	struct EQUATION_SIS *sis_2;
-	i=0;
-	if (eq->CHILD){
-		do {
-			if (i==0){
-				output->CHILD = doCopy(eq->CHILD);
-				sis_2 = eq->NEXT_CHILD;
-				if (!sis_2) output->NEXT_CHILD = NULL;
-				else output->NEXT_CHILD = malloc(sizeof(struct EQUATION_SIS));
-				sis = output->NEXT_CHILD;
-			} else {
-				sis->CHILD = doCopy(sis_2->CHILD);
-				sis_2 = sis_2->NEXT_CHILD;
-				if (!sis_2) sis->NEXT_CHILD = NULL;
-				else sis->NEXT_CHILD = malloc(sizeof(struct EQUATION_SIS));
-				sis = sis->NEXT_CHILD;
-			}
-			++i;
-		} while (sis_2);
-	} else {
-		output->NEXT_CHILD = NULL;
-		output->CHILD = NULL;
-	}
-	return output;
-}
 
-int approx(float a, float b){
-	float diff = a-b;
-	if (diff < 0.0f){
-		diff = -diff;
-	}
-	return diff < 0.001f;
-}
-
-int isSame(struct EQUATION *eq1, struct EQUATION *eq2){
-	int i;
-	if (equationChildCount(eq1) == equationChildCount(eq2) && eq1->TYPE == eq2->TYPE){
-		if (TYPE_MACRO_OP(eq1) == VARIABLE_TERM && eq1->VALUE.VARIABLE_NAME == eq2->VALUE.VARIABLE_NAME) return 1;
-		if (TYPE_MACRO_OP(eq1) == CONSTANT_TERM && approx(eq1->VALUE.CONSTANT_VALUE, eq2->VALUE.CONSTANT_VALUE)) return 1;
-		if (eq1->CHILD == 0) return 0;
-		i =0;
-		struct EQUATION_SIS *sis;
-		struct EQUATION_SIS *sis_2;
-		do {
-			if (i==0){
-				if (!isSame(eq1->CHILD, eq2->CHILD)) return 0;
-				sis_2 = eq2->NEXT_CHILD;
-				sis = eq1->NEXT_CHILD;
-			} else {
-				if (!isSame(sis->CHILD, sis_2->CHILD)) return 0;
-				sis_2 = sis_2->NEXT_CHILD;
-				sis = sis->NEXT_CHILD;
-			}
-			++i;
-		} while (sis);
-		return 1;
-	}
-	return 0;
-}
-
-//Check if formula is applicable and find the unknown terms in formula structure, ignoring commutative property
-int isFormulaApplicable(struct EQUATION *eq, struct EQUATION *formula, struct EQUATION *varList[MAX_VARIABLE_IN_FORMULA]){
-	int i;
-	if (TYPE_MACRO_OP(formula) == VARIABLE_TERM){
-		if (TYPE_MACRO_FX(formula) == NOT_A_FUNCTION){ //A formula variable accepts anything
-			if (varList[formula->VALUE.VARIABLE_NAME - 'a'] == NULL){
-				varList[formula->VALUE.VARIABLE_NAME - 'a'] = doCopy(eq);
-				return 1;
-			} else {
-				return isSame(eq, varList[formula->VALUE.VARIABLE_NAME - 'a']);
-			}
-		} else if (TYPE_MACRO_FX(formula) == TYPE_MACRO_FX(eq)){ //If inside formula, function should be same now
-			if (varList[formula->VALUE.VARIABLE_NAME - 'a'] == NULL){
-				varList[formula->VALUE.VARIABLE_NAME - 'a'] = doCopy(eq);
-				varList[formula->VALUE.VARIABLE_NAME - 'a']->TYPE &= ~0x7;
-				return 1;
-			} else {
-				return isSame(eq, varList[formula->VALUE.VARIABLE_NAME - 'a']);
-			}
-		}
-	} else if (equationChildCount(formula) == equationChildCount(eq) && TYPE_MACRO_OP(formula) == TYPE_MACRO_OP(eq) && TYPE_MACRO_FX(formula) == TYPE_MACRO_FX(eq)){ //Function, no of children and operator should be same
-		if (TYPE_MACRO_OP(formula) == CONSTANT_TERM){
-			return approx(formula->VALUE.CONSTANT_VALUE, eq->VALUE.CONSTANT_VALUE); //Return the constant even if its inside a function
-		} else {
-			int isApplicable = 1;
-			struct EQUATION_SIS *sis;
-			struct EQUATION_SIS *sis_2;
-			i=0;
-			do {
-				if (i==0){
-					if (!isFormulaApplicable(eq->CHILD, formula->CHILD, varList)) isApplicable = 0;
-					sis_2 = formula->NEXT_CHILD;
-					sis = eq->NEXT_CHILD;
-				} else {
-					if (!isFormulaApplicable(sis->CHILD, sis_2->CHILD, varList)) isApplicable = 0;
-					sis_2 = sis_2->NEXT_CHILD;
-					sis = sis->NEXT_CHILD;
-				}
-				++i;
-			} while(sis);
-			return isApplicable;
-		}
-	}
-	return 0;
-}
 struct EQUATION_SIS *selectChild_helper(struct EQUATION *eq, int n){
 	struct EQUATION_SIS *sis;
 	sis = eq->NEXT_CHILD;
@@ -184,9 +75,50 @@ struct EQUATION_SIS *selectChild_helper(struct EQUATION *eq, int n){
 	}
 }
 
+struct EQUATION *doCopy(struct EQUATION *eq){
+	int i;
+	struct EQUATION *output = malloc(sizeof(struct EQUATION));
+	output->TYPE = eq->TYPE;
+	if (output->TYPE == VARIABLE_TERM){
+		output->VALUE.VARIABLE_NAME = eq->VALUE.VARIABLE_NAME;
+	} else if (output->TYPE == CONSTANT_TERM){
+		output->VALUE.CONSTANT_VALUE = eq->VALUE.CONSTANT_VALUE;
+	}
+	struct EQUATION_SIS *sis;
+	int count = equationChildCount(eq);
+	if (count == 1 && eq->CHILD == NULL){
+		output->NEXT_CHILD = NULL;
+		output->CHILD = NULL;
+		return output;
+	}
+	if (count == 1){
+		output->NEXT_CHILD = NULL;
+		output->CHILD = doCopy(eq->CHILD);
+		return output;
+	}
+	if (count > 1){
+		sis = output->NEXT_CHILD = malloc(sizeof(struct EQUATION_SIS));	
+		output->CHILD = doCopy(eq->CHILD);
+		for (i=1; i<count; ++i){
+			sis->CHILD = doCopy(selectChild_helper(eq, i)->CHILD);
+			if (count - 1 == i)
+				sis->NEXT_CHILD = NULL;
+			else 
+				sis = sis->NEXT_CHILD = malloc(sizeof(struct EQUATION_SIS));
+		}
+	}
+	return output;
+}
+
+
 struct EQUATION *delChild_helper(struct EQUATION *eq, int n){
 	struct EQUATION_SIS *sis;
 	int count = equationChildCount(eq);
+	if (count == 1 && n == 0){
+		eq->CHILD = 0;
+		eq->NEXT_CHILD = 0;
+		return eq;
+	}
 	if (n == 0){
 		eq->CHILD = eq->NEXT_CHILD->CHILD;
 		eq->NEXT_CHILD = eq->NEXT_CHILD->NEXT_CHILD;
@@ -214,7 +146,10 @@ struct EQUATION *delChild_helper(struct EQUATION *eq, int n){
 
 struct EQUATION *addChild_helper(struct EQUATION *eq, struct EQUATION *added){
 	int count = equationChildCount(eq);
-	if (count == 1){
+	if (count == 1 && eq->CHILD == 0){
+		eq->CHILD = added;
+	}
+	else if (count == 1){
 		eq->NEXT_CHILD = malloc(sizeof(struct EQUATION_SIS));
 		eq->NEXT_CHILD->CHILD = added;
 		eq->NEXT_CHILD->NEXT_CHILD = 0;
@@ -226,12 +161,49 @@ struct EQUATION *addChild_helper(struct EQUATION *eq, struct EQUATION *added){
 	}
 	return eq;
 }
+
+struct EQUATION *operateEquation(unsigned char type, struct EQUATION *eq){
+	struct EQUATION *output = malloc(sizeof(struct EQUATION));
+	output->TYPE = type;
+	output->CHILD = doCopy(eq);
+	output->NEXT_CHILD = NULL;
+	return output;
+}
+
+struct EQUATION *operateEquation2(unsigned char type, struct EQUATION *eq1, struct EQUATION *eq2){
+	struct EQUATION *output = malloc(sizeof(struct EQUATION));
+	output->TYPE = type;
+	output->CHILD = doCopy(eq1);
+	output->NEXT_CHILD = malloc(sizeof(struct EQUATION_SIS));
+	output->NEXT_CHILD->CHILD = doCopy(eq2);
+	output->NEXT_CHILD->NEXT_CHILD = NULL;
+	return output;
+}
+
+struct EQUATION *makeVariable(char variableName){
+	struct EQUATION *output = malloc(sizeof(struct EQUATION));
+	output->TYPE = VARIABLE_TERM;
+	output->VALUE.VARIABLE_NAME = variableName;
+	output->CHILD = NULL;
+	output->NEXT_CHILD = NULL;
+	return output;
+}
+
+struct EQUATION *makeNumber(float x){
+	struct EQUATION *output = malloc(sizeof(struct EQUATION));
+	output->TYPE = CONSTANT_TERM;
+	output->VALUE.CONSTANT_VALUE = x;
+	output->CHILD = NULL;
+	output->NEXT_CHILD = NULL;
+	return output;
+}
+
 struct EQUATION *fixCommutative(struct EQUATION *eq){
 	int i, j;
 	struct EQUATION_SIS *sis;
-	if (TYPE_MACRO_OP(eq) == ADD || TYPE_MACRO_OP(eq) == MULTIPLY){
-		unsigned char tmp = TYPE_MACRO_OP(eq);
-		while (tmp == TYPE_MACRO_OP(eq->CHILD) && TYPE_MACRO_FX(eq->CHILD) == NOT_A_FUNCTION){
+	if (eq->TYPE == ADD || eq->TYPE == MULTIPLY){
+		unsigned char tmp = eq->TYPE;
+		while (tmp == eq->CHILD->TYPE){
 			eq = addChild_helper(eq, eq->CHILD->CHILD);
 			for (j=1; j<equationChildCount(eq->CHILD); ++j){
 				eq = addChild_helper(eq, selectChild_helper(eq->CHILD, j)->CHILD);
@@ -240,8 +212,8 @@ struct EQUATION *fixCommutative(struct EQUATION *eq){
 		}
 		for (i=1; i<equationChildCount(eq); ++i){
 			sis = selectChild_helper(eq, i);
-			if (tmp == TYPE_MACRO_OP(sis->CHILD) && TYPE_MACRO_FX(sis->CHILD) == NOT_A_FUNCTION){
-				eq = addChild_helper(eq, sis->CHILD);
+			if (tmp == sis->CHILD->TYPE){
+				eq = addChild_helper(eq, sis->CHILD->CHILD);
 				for (j=1; j<equationChildCount(sis->CHILD); ++j){
 					eq = addChild_helper(eq, selectChild_helper(sis->CHILD, j)->CHILD);
 				}
@@ -252,185 +224,18 @@ struct EQUATION *fixCommutative(struct EQUATION *eq){
 	}
 	if (eq->CHILD){
 		eq->CHILD = fixCommutative(eq->CHILD);
-		for (i=1; i<equationChildCount(eq); ++i){
-			sis = selectChild_helper(eq, i);
-			sis->CHILD = fixCommutative(sis->CHILD);
+		if (eq->NEXT_CHILD){
+			for (i=1; i<equationChildCount(eq); ++i){
+				sis = selectChild_helper(eq, i);
+				sis->CHILD = fixCommutative(sis->CHILD);
+			}
 		}
 	}
 	return eq;
 }
 
-//Replace a formula's variable given the replacement
-struct EQUATION *replaceOutputFormula(struct EQUATION *formula, struct EQUATION *varList[MAX_VARIABLE_IN_FORMULA]){
-	int i;
-	if (TYPE_MACRO_OP(formula) == VARIABLE_TERM){
-		unsigned char tmp=0;
-		if (TYPE_MACRO_FX(formula) != NOT_A_FUNCTION){
-			tmp = TYPE_MACRO_FX(formula);
-		}
-		formula = doCopy(varList[formula->VALUE.VARIABLE_NAME - 'a']); //replace
-		formula->TYPE |= tmp; //Preserve function which convered the variable
-		return formula;
-	}
-	i=0;
-	struct EQUATION_SIS *sis;
-	if (formula->CHILD){
-		do {
-			if (i==0){
-				formula->CHILD = replaceOutputFormula(formula->CHILD, varList);
-				sis = formula->NEXT_CHILD;
-			} else {
-				sis->CHILD = replaceOutputFormula(sis->CHILD, varList);
-				sis = sis->NEXT_CHILD;
-			}
-			++i;
-		} while(sis);
-	}
-	return formula;
-}
-
-#define MAX_DEPTH_PV 250
-#define MAX_MOVE_GEN_LIST_SIZE 25
-
-#define MAX_TT_SIZE 1000
-
-int findInTT(struct EQUATION *eq, int *ttCount, struct EQUATION *transpositionTable[MAX_TT_SIZE]){
-	int i;
-	for (i=0; i<(*ttCount); ++i){
-		if (isSame(eq, transpositionTable[i])) return 1;
-	}	
-	return 0;
-}
-
-#define A(x, y) operateEquation(ADD, NOT_A_FUNCTION, x, y)
-#define M(x, y) operateEquation(MULTIPLY, NOT_A_FUNCTION, x, y)  
-#define W(x, y) operateEquation(EXPONENT, NOT_A_FUNCTION, x, y)
-#define N(x) makeNumber(x)
-#define V(x) makeVariable(x)
-#define FX(type, x) makeFunction(type, x)
-
-//Operate on two equations
-struct EQUATION *operateEquation(unsigned char operation, unsigned char funcType, struct EQUATION *eq1, struct EQUATION *eq2){
-	struct EQUATION *output = malloc(sizeof(struct EQUATION));
-	output->TYPE = TYPE_MACRO(operation, funcType);
-	output->CHILD = eq1;
-	output->NEXT_CHILD = malloc(sizeof(struct EQUATION_SIS));
-	output->NEXT_CHILD->CHILD = eq2;
-	output->NEXT_CHILD->NEXT_CHILD = NULL;
-	return output;
-}
-
-struct EQUATION *genMoves(struct EQUATION *eq, int n, int *nodeCount){
-	struct EQUATION *varList[MAX_VARIABLE_IN_FORMULA];
-	int count = equationChildCount(eq);
-	int i, j;
-	struct EQUATION *tmp;
-	struct EQUATION *tmp_2;
-	if (count == 2){
-		memset(varList, 0, sizeof(struct EQUATION *)*MAX_VARIABLE_IN_FORMULA);
-		if (--(*nodeCount) == 0 && isFormulaApplicable(eq, formulaInputList[n], varList)){
-			return replaceOutputFormula(doCopy(formulaOutputList[n]), varList);
-		}
-		if (*nodeCount == 0) return eq;
-		tmp = genMoves(eq->CHILD, n, nodeCount);
-		if (tmp){
-			eq->CHILD = tmp;
-			return eq;
-		}
-		tmp = genMoves(eq->NEXT_CHILD->CHILD, n, nodeCount);
-		if (tmp){
-			eq->NEXT_CHILD->CHILD = tmp;
-			return eq;
-		}
-	}
-	else if (count > 2){
-		for (i=0; i<count; ++i){
-			for (j=i+1; j<count; ++j){
-				struct EQUATION *combine;
-				if (i==0){
-					combine = operateEquation(TYPE_MACRO_OP(eq), TYPE_MACRO_FX(eq), eq->CHILD, selectChild_helper(eq, j)->CHILD);
-				} else {
-					combine = operateEquation(TYPE_MACRO_OP(eq), TYPE_MACRO_FX(eq), selectChild_helper(eq, i)->CHILD, selectChild_helper(eq, j)->CHILD);
-				}
-				memset(varList, 0, sizeof(struct EQUATION *)*MAX_VARIABLE_IN_FORMULA);
-				if (--(*nodeCount) == 0 && isFormulaApplicable(combine, formulaInputList[n], varList)){
-					tmp = doCopy(eq);
-					if (n == 0 || n == 1){
-						if (i==0){
-							tmp_2 = tmp->CHILD;
-							tmp->CHILD = selectChild_helper(tmp, j)->CHILD;
-							selectChild_helper(tmp, j)->CHILD = tmp_2;
-						} else {
-							tmp_2 = selectChild_helper(tmp, i)->CHILD;
-							selectChild_helper(tmp, i)->CHILD = selectChild_helper(tmp, j)->CHILD;
-							selectChild_helper(tmp, j)->CHILD = tmp_2;
-						}
-						return tmp;
-					}
-					tmp = delChild_helper(tmp, j);
-					tmp = delChild_helper(tmp, i);
-					tmp = addChild_helper(tmp, replaceOutputFormula(doCopy(formulaOutputList[n]), varList));
-					return fixCommutative(tmp);
-				}
-				if (*nodeCount == 0) return eq;
-			}
-			if (i==0){
-				tmp = genMoves(eq->CHILD, n, nodeCount);
-				if (tmp){
-					eq->CHILD = tmp;
-					return eq;
-				}
-			} else {
-				tmp = genMoves(selectChild_helper(eq, i)->CHILD, n, nodeCount);
-				if (tmp){
-					selectChild_helper(eq, i)->CHILD = tmp;
-					return eq;
-				}
-			}
-		}
-	}
-	return 0;
-}
-
-void genMoveCount(struct EQUATION *eq, int *nodeCount){
-	int count = equationChildCount(eq);
-	int i, j;
-	if (count == 2){
-		++(*nodeCount);
-		genMoveCount(eq->CHILD, nodeCount);
-		genMoveCount(eq->NEXT_CHILD->CHILD, nodeCount);
-	}
-	else if (count > 2){
-		for (i=0; i<count; ++i){
-			for (j=i+1; j<count; ++j){
-				++(*nodeCount);
-			}
-			if (i==0)
-			genMoveCount(eq->CHILD, nodeCount);
-			else
-			genMoveCount(selectChild_helper(eq, i)->CHILD, nodeCount);
-		}
-	}
-}
-
-void makeList(struct EQUATION *eq, int *moveListCount, struct EQUATION *moveList[MAX_MOVE_GEN_LIST_SIZE]){
-	int i, j;
-	int nodeCount=0;
-	genMoveCount(eq, &nodeCount);
-	for (i=0; i<TOTAL_FORMULA_COUNT; ++i){
-		for (j=1; j<=nodeCount; ++j){
-			struct EQUATION *copied = doCopy(eq);
-			int tmp= j;
-			copied = genMoves(copied, i, &tmp);
-			if (!isSame(copied, eq)){
-				moveList[(*moveListCount)++] = copied;
-			}
-		}
-	}
-}
-
 int constantOnlyCheck_helper(struct EQUATION *eq){
-	if (TYPE_MACRO_OP(eq) == CONSTANT_TERM) return 1;
+	if (eq->TYPE == CONSTANT_TERM) return 1;
 	struct EQUATION_SIS *sis;
 	if (eq->CHILD){
 		if (!constantOnlyCheck_helper(eq->CHILD)) return 0;
@@ -444,14 +249,13 @@ int constantOnlyCheck_helper(struct EQUATION *eq){
 }
 
 float constantFormulate_helper(struct EQUATION *eq){
-	float result;
 	struct EQUATION_SIS *sis;
 	float sum=0;
 	float mul=1;
 	float a, b;
-	if (eq->CHILD == 0) result = eq->VALUE.CONSTANT_VALUE; 
+	if (eq->CHILD == 0) return eq->VALUE.CONSTANT_VALUE; 
 	else {
-		switch (TYPE_MACRO_OP(eq)){
+		switch (eq->TYPE){
 			case ADD:
 				sum += constantFormulate_helper(eq->CHILD);
 				sis = eq->NEXT_CHILD;
@@ -459,8 +263,7 @@ float constantFormulate_helper(struct EQUATION *eq){
 					sum += constantFormulate_helper(sis->CHILD);
 					sis = sis->NEXT_CHILD;
 				}
-				result = sum;
-				break;
+				return sum;
 			case MULTIPLY:
 				mul *= constantFormulate_helper(eq->CHILD);
 				sis = eq->NEXT_CHILD;
@@ -468,43 +271,28 @@ float constantFormulate_helper(struct EQUATION *eq){
 					mul *= constantFormulate_helper(sis->CHILD);
 					sis = sis->NEXT_CHILD;
 				}
-				result = mul;
-				break;
+				return mul;
 			case EXPONENT:
 				a = constantFormulate_helper(eq->CHILD);
 				b = constantFormulate_helper(eq->NEXT_CHILD->CHILD);
-				result = powf(a, b);
-				break;
+				return powf(a, b);
+			case SINE:
+				return sinf(constantFormulate_helper(eq->CHILD));
+			case COSINE:
+				return cosf(constantFormulate_helper(eq->CHILD));
+			case COSECANT:
+				return 1/sinf(constantFormulate_helper(eq->CHILD));
+			case SECANT:
+				return 1/cosf(constantFormulate_helper(eq->CHILD));
+			case TANGENT:
+				return tanf(constantFormulate_helper(eq->CHILD));
+			case COTANGENT:
+				return 1/tanf(constantFormulate_helper(eq->CHILD));
+			case LAWN:
+				return logf(constantFormulate_helper(eq->CHILD));
 		}
 	}
-	switch (TYPE_MACRO_FX(eq)){
-		case NOT_A_FUNCTION:
-			return result;
-		case SINE:
-			return sinf(result);
-		case COSINE:
-			return cosf(result);
-		case COSECANT:
-			return 1/sinf(result);
-		case SECANT:
-			return 1/cosf(result);
-		case TANGENT:
-			return tanf(result);
-		case COTANGENT:
-			return 1/tanf(result);
-		case LAWN:
-			return logf(result);
-	}
-}
-
-//Make a number in form of equation
-struct EQUATION *makeNumber(float x){
-	struct EQUATION *output = malloc(sizeof(struct EQUATION));
-	output->TYPE = TYPE_MACRO(CONSTANT_TERM, NOT_A_FUNCTION);
-	output->VALUE.CONSTANT_VALUE = x;
-	output->CHILD = NULL;
-	output->NEXT_CHILD = NULL;
-	return output;
+	return 0;
 }
 
 struct EQUATION *applyConstantEverywhere_helper(struct EQUATION *eq){
@@ -532,72 +320,347 @@ struct EQUATION *formulatePartial_helper(struct EQUATION *eq){
 	float result;
 	struct EQUATION_SIS *sis;
 	
-	if (TYPE_MACRO_OP(eq->CHILD) != CONSTANT_TERM) isPartial = 1;
+	if (eq->CHILD->TYPE != CONSTANT_TERM) isPartial = 1;
 	for (i=1; i<count; ++i){
-		if (TYPE_MACRO_OP(selectChild_helper(eq, i)->CHILD) != CONSTANT_TERM)
+		if (selectChild_helper(eq, i)->CHILD->TYPE != CONSTANT_TERM)
 			isPartial = 1;
 	}
 
 	if (isPartial == 1){
-		if (TYPE_MACRO_OP(eq->CHILD) == CONSTANT_TERM) ++isPartial;
+		if (eq->CHILD->TYPE == CONSTANT_TERM) ++isPartial;
 		for (i=1; i<count; ++i){
-			if (TYPE_MACRO_OP(selectChild_helper(eq, i)->CHILD) == CONSTANT_TERM)
+			if (selectChild_helper(eq, i)->CHILD->TYPE == CONSTANT_TERM)
 				++isPartial;
 		}
 	}
 	
 	if (isPartial > 2){
-		switch (TYPE_MACRO_OP(eq)){
+		switch (eq->TYPE){
 			case ADD:
-				if (TYPE_MACRO_OP(eq->CHILD) == CONSTANT_TERM) sum += eq->CHILD->VALUE.CONSTANT_VALUE;
+				if (eq->CHILD->TYPE == CONSTANT_TERM) sum += eq->CHILD->VALUE.CONSTANT_VALUE;
 				for (i=1; i<count; ++i){
 					sis = selectChild_helper(eq, i);
-					if (TYPE_MACRO_OP(sis->CHILD) == CONSTANT_TERM) sum += sis->CHILD->VALUE.CONSTANT_VALUE;
+					if (sis->CHILD->TYPE == CONSTANT_TERM) sum += sis->CHILD->VALUE.CONSTANT_VALUE;
 				}
 				result = sum;
 				break;
 			case MULTIPLY:
-				if (TYPE_MACRO_OP(eq->CHILD) == CONSTANT_TERM) mul *= eq->CHILD->VALUE.CONSTANT_VALUE;
+				if (eq->CHILD->TYPE == CONSTANT_TERM) mul *= eq->CHILD->VALUE.CONSTANT_VALUE;
 				for (i=1; i<count; ++i){
 					sis = selectChild_helper(eq, i);
-					if (TYPE_MACRO_OP(sis->CHILD) == CONSTANT_TERM) mul *= sis->CHILD->VALUE.CONSTANT_VALUE;
+					if (sis->CHILD->TYPE == CONSTANT_TERM) mul *= sis->CHILD->VALUE.CONSTANT_VALUE;
 				}
 				result = mul;
 				break;
 		}
-		while (TYPE_MACRO_OP(eq->CHILD) == CONSTANT_TERM){
+		while (eq->CHILD->TYPE == CONSTANT_TERM){
 			eq = delChild_helper(eq, 0);
 		}
 		
 		for (i=1; i<equationChildCount(eq); ++i){
-			if (TYPE_MACRO_OP(selectChild_helper(eq, i)->CHILD) == CONSTANT_TERM){
+			if (selectChild_helper(eq, i)->CHILD->TYPE == CONSTANT_TERM){
 				eq = delChild_helper(eq, i);
 				--i;
 			}
 		}
 		addChild_helper(eq, makeNumber(result));
 	}
-	
+	count = equationChildCount(eq);
+	eq->CHILD = formulatePartial_helper(eq->CHILD);
+	for (i=1; i<count; ++i){
+		sis = selectChild_helper(eq, i);
+		sis->CHILD = formulatePartial_helper(sis->CHILD);
+	}
 	return eq;
 }
+
 struct EQUATION *fixConstant(struct EQUATION *eq){
 	eq = applyConstantEverywhere_helper(eq);
 	eq = formulatePartial_helper(eq);
 	return eq;
 }
 
-void removeMoveList(int *moveListCount, struct EQUATION *moveList[MAX_MOVE_GEN_LIST_SIZE], int n){
-	int i;
-	for (i=n; i<*moveListCount-1; ++i){
-		moveList[i] = moveList[i+1];
+int approx(float a, float b){
+	float diff = a-b;
+	if (diff < 0.0f){
+		diff = -diff;
 	}
-	--(*moveListCount);
+	return diff < 0.001f;
+}
+
+int isSame(struct EQUATION *eq1, struct EQUATION *eq2){
+	int i;
+	if (equationChildCount(eq1) == equationChildCount(eq2) && eq1->TYPE == eq2->TYPE){
+		if (eq1->TYPE == VARIABLE_TERM && eq1->VALUE.VARIABLE_NAME == eq2->VALUE.VARIABLE_NAME) return 1;
+		if (eq1->TYPE == CONSTANT_TERM && approx(eq1->VALUE.CONSTANT_VALUE, eq2->VALUE.CONSTANT_VALUE)) return 1;
+		if (eq1->CHILD == 0) return 0;
+		i =0;
+		struct EQUATION_SIS *sis;
+		struct EQUATION_SIS *sis_2;
+		do {
+			if (i==0){
+				if (!isSame(eq1->CHILD, eq2->CHILD)) return 0;
+				sis_2 = eq2->NEXT_CHILD;
+				sis = eq1->NEXT_CHILD;
+			} else {
+				if (!isSame(sis->CHILD, sis_2->CHILD)) return 0;
+				sis_2 = sis_2->NEXT_CHILD;
+				sis = sis->NEXT_CHILD;
+			}
+			++i;
+		} while (sis);
+		return 1;
+	}
+	return 0;
+}
+
+struct EQUATION *replaceOutputFormula(struct EQUATION *formula, struct EQUATION *varList[MAX_VARIABLE_IN_FORMULA]){
+	int i;
+	if (formula->TYPE == VARIABLE_TERM){
+		formula = doCopy(varList[formula->VALUE.VARIABLE_NAME - 'a']);
+		return formula;
+	}
+	i=0;
+	struct EQUATION_SIS *sis;
+	if (formula->CHILD){
+		do {
+			if (i==0){
+				formula->CHILD = replaceOutputFormula(formula->CHILD, varList);
+				sis = formula->NEXT_CHILD;
+			} else {
+				sis->CHILD = replaceOutputFormula(sis->CHILD, varList);
+				sis = sis->NEXT_CHILD;
+			}
+			++i;
+		} while(sis);
+	}
+	return formula;
+}
+
+void bracketGroupList2(int bg[MAX_BRACKET_GROUP], int bgList[MAX_BRACKET_GROUP_LIST_SIZE][MAX_BRACKET_GROUP], int *bgListCount,
+					  int totalSum, int prevNum, int sum, int location){
+	int i;
+	int j;
+	for (i=prevNum;(i+sum)<=totalSum; ++i){
+		bg[location] = i;
+		if ((i+sum) == totalSum){
+			for (j=0; j<=location; ++j){
+				bgList[*bgListCount][j] = bg[j];
+			}
+			(*bgListCount)++;
+			break;
+		}
+		bracketGroupList2(bg, bgList, bgListCount, totalSum, i, sum+i, location+1);
+	}
+}
+
+struct EQUATION *genMovesCommutative(struct EQUATION *eq, int *nodeCount){
+	int count = equationChildCount(eq);
+	int i, j;
+	struct EQUATION *tmp;
+	struct EQUATION *tmp_2;
+	if (eq->TYPE < EXPONENT && count > 1){
+		for (i=0; i<count; ++i){
+			for (j=i+1; j<count; ++j){
+				if (--(*nodeCount) == 0){
+					tmp = doCopy(eq);
+					if (i==0){
+						tmp_2 = tmp->CHILD;
+						tmp->CHILD = selectChild_helper(tmp, j)->CHILD;
+						selectChild_helper(tmp, j)->CHILD = tmp_2;
+					} else {
+						tmp_2 = selectChild_helper(tmp, i)->CHILD;
+						selectChild_helper(tmp, i)->CHILD = selectChild_helper(tmp, j)->CHILD;
+						selectChild_helper(tmp, j)->CHILD = tmp_2;
+					}
+					return tmp;
+				}
+				if (*nodeCount == 0) return eq;
+			}
+		}
+	}
+	if (eq->CHILD){
+		for (i=0; i<count; ++i){
+			if (i==0){
+				tmp = genMovesCommutative(eq->CHILD, nodeCount);
+				if (tmp){
+					eq->CHILD = tmp;
+					return eq;
+				}
+			} else {
+				tmp = genMovesCommutative(selectChild_helper(eq, i)->CHILD, nodeCount);
+				if (tmp){
+					selectChild_helper(eq, i)->CHILD = tmp;
+					return eq;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+void genMoveCountCommutative(struct EQUATION *eq, int *nodeCount){
+	int i, j;
+	int count = equationChildCount(eq);
+	if (eq->TYPE < EXPONENT && count > 1){
+		for (i=0; i<count; ++i){
+			for (j=i+1; j<count; ++j){
+				++(*nodeCount);
+			}
+		}
+	}
+	if (eq->CHILD){
+		for (i=0; i<count; ++i){
+			if (i==0)
+			genMoveCountCommutative(eq->CHILD, nodeCount);
+			else
+			genMoveCountCommutative(selectChild_helper(eq, i)->CHILD, nodeCount);
+		}
+	}
+}
+struct EQUATION *bracketGrouper_helper(struct EQUATION *eq, int bg[MAX_BRACKET_GROUP]){
+	int i, j;
+	struct EQUATION *tmp;
+	struct EQUATION *output;
+	int count = equationChildCount(eq);
+	output = doCopy(eq);
+	int not_one = 0;
+	for (i=0; bg[i]; ++i) if (bg[i] != 1) not_one = 1;
+	if (!not_one) return output;
+	for (i=0; i<count; ++i) delChild_helper(output, 0);
+	for (i=0; bg[i]; ++i){
+		int sum_left=0;
+		int sum_right=0;
+		if (bg[i] == 1){
+			for (j=0; j<i; ++j) sum_left+=bg[j];
+			if (sum_left == 0) output = addChild_helper(output, doCopy(eq->CHILD));
+			else output = addChild_helper(output, selectChild_helper(eq, sum_left)->CHILD);
+		} else {
+			tmp = doCopy(eq);
+			for (j=0; j<i; ++j) sum_left+=bg[j];
+			for (j=0; j<sum_left; ++j) tmp = delChild_helper(tmp, 0);
+			for (j=i+1; bg[j]; ++j) sum_right+=bg[j];
+			for (j=0; j<sum_right; ++j) tmp = delChild_helper(tmp, bg[i]);
+			output = addChild_helper(output, tmp);
+		}
+	}
+	return output;
+}
+int isFormulaApplicable(struct EQUATION *eq, struct EQUATION *formula, struct EQUATION *varList[MAX_VARIABLE_IN_FORMULA]){
+	int i, j;
+	struct EQUATION *tmp;
+	struct EQUATION_SIS *sis;
+	struct EQUATION_SIS *sis_2;
+	int isApplicable;
+	if (formula->TYPE == VARIABLE_TERM){
+		if (varList[formula->VALUE.VARIABLE_NAME - 'a'] == NULL){
+			varList[formula->VALUE.VARIABLE_NAME - 'a'] = doCopy(eq);
+			return 1;
+		} else {
+			return isSame(eq, varList[formula->VALUE.VARIABLE_NAME - 'a']);
+		}
+	} else if (equationChildCount(formula) == equationChildCount(eq) && eq->TYPE == formula->TYPE){
+		if (formula->TYPE == CONSTANT_TERM){
+			return approx(formula->VALUE.CONSTANT_VALUE, eq->VALUE.CONSTANT_VALUE);
+		} else {
+			isApplicable = 1;
+			i=0;
+			do {
+				if (i==0){
+					if (!isFormulaApplicable(eq->CHILD, formula->CHILD, varList)) isApplicable = 0;
+					sis_2 = formula->NEXT_CHILD;
+					sis = eq->NEXT_CHILD;
+				} else {
+					if (!isFormulaApplicable(sis->CHILD, sis_2->CHILD, varList)) isApplicable = 0;
+					sis_2 = sis_2->NEXT_CHILD;
+					sis = sis->NEXT_CHILD;
+				}
+				++i;
+			} while(sis);
+			return isApplicable;
+		}
+	}
+	return 0;
+}
+struct EQUATION *genMoves(struct EQUATION *eq, int n, int *nodeCount){
+	int i;
+	struct EQUATION *varList[MAX_VARIABLE_IN_FORMULA];
+	int count = equationChildCount(eq);
+	struct EQUATION *tmp;
+	if (eq->CHILD){
+		memset(varList, 0, sizeof(struct EQUATION *)*MAX_VARIABLE_IN_FORMULA);
+		if (--(*nodeCount) == 0 && isFormulaApplicable(eq, formulaInputList[n], varList)){
+			tmp = replaceOutputFormula(doCopy(formulaOutputList[n]), varList);
+			return tmp;
+		}
+		if (*nodeCount == 0) return eq;
+		for (i=0; i<count; ++i){
+			if (i==0){
+				tmp = genMoves(eq->CHILD, n, nodeCount);
+				if (tmp){
+					eq->CHILD = tmp;
+					return eq;
+				}
+			} else {
+				tmp = genMoves(selectChild_helper(eq, i)->CHILD, n, nodeCount);
+				if (tmp){
+					selectChild_helper(eq, i)->CHILD = tmp;
+					return eq;
+				}
+			}
+		}
+	}
+	return 0;
+}
+void genMoveCount(struct EQUATION *eq, int *nodeCount){
+	int i;
+	int count = equationChildCount(eq);
+	if (eq->CHILD){
+		++(*nodeCount);
+		for (i=0; i<count; ++i){
+			if (i==0)
+			genMoveCount(eq->CHILD, nodeCount);
+			else
+			genMoveCount(selectChild_helper(eq, i)->CHILD, nodeCount);
+		}
+	}
+}
+void makeList(struct EQUATION *eq, int *moveListCount, struct EQUATION *moveList[MAX_MOVE_GEN_LIST_SIZE]){
+	int i, j;
+	int k;
+	int nodeCount=0;
+	genMoveCountCommutative(eq, &nodeCount);
+	for (j=1; j<=nodeCount; ++j){
+		struct EQUATION *copied = doCopy(eq);
+		int tmp= j;
+		copied = genMovesCommutative(copied, &tmp);
+		if (!isSame(copied, eq)){
+			moveList[(*moveListCount)++] = copied;
+		}
+	}
+	struct EQUATION *genList[MAX_LONG_BRACKET_GEN_LIST];
+	int genListCount = longBracketGen(eq, genList);
+	for (k=0; k<genListCount; ++k){
+		nodeCount = 0;
+		genMoveCount(genList[k], &nodeCount);
+		for (i=0; i<TOTAL_FORMULA_COUNT; ++i){
+			for (j=1; j<=nodeCount; ++j){
+				struct EQUATION *copied = doCopy(genList[k]);
+				int tmp= j;
+				copied = genMoves(copied, i, &tmp);
+				if (!isSame(copied, genList[k])){
+					moveList[(*moveListCount)++] = copied;
+				}
+			}
+		}
+	}
 }
 
 void moveListProc(int *moveListCount, struct EQUATION *moveList[MAX_MOVE_GEN_LIST_SIZE]){
 	int i, j, k;
 	for (i=0; i<*moveListCount; ++i){
-		moveList[i] = fixCommutative(fixConstant(moveList[i]));
+		moveList[i] = fixCommutative(moveList[i]);
+		moveList[i] = fixConstant(moveList[i]);
 	}
 	for (i=0; i<*moveListCount; ++i){
 		for (j=i+1; j<*moveListCount; ++j){
@@ -610,6 +673,14 @@ void moveListProc(int *moveListCount, struct EQUATION *moveList[MAX_MOVE_GEN_LIS
 			}
 		}
 	}
+}
+
+int findInTT(struct EQUATION *eq, int *ttCount, struct EQUATION *transpositionTable[MAX_TT_SIZE]){
+	int i;
+	for (i=0; i<(*ttCount); ++i){
+		if (isSame(eq, transpositionTable[i])) return 1;
+	}	
+	return 0;
 }
 
 struct MATH_STEP {
@@ -670,6 +741,7 @@ struct MATH_STEP *search(struct EQUATION *eq, struct EQUATION *target){
 		
 		memset(moveList, 0, sizeof(struct EQUATION *)*MAX_MOVE_GEN_LIST_SIZE);
 		moveListCount = 0;
+		
 		makeList(v->DATA, &moveListCount, moveList);
 		moveListProc(&moveListCount, moveList);
 		
@@ -686,40 +758,25 @@ struct MATH_STEP *search(struct EQUATION *eq, struct EQUATION *target){
 	return 0;
 }
 
-//Make variable with a char letter as name
-struct EQUATION *makeVariable(char variableName){
-	struct EQUATION *output = malloc(sizeof(struct EQUATION));
-	output->TYPE = TYPE_MACRO(VARIABLE_TERM, NOT_A_FUNCTION);
-	output->VALUE.VARIABLE_NAME = variableName;
-	output->CHILD = NULL;
-	output->NEXT_CHILD = NULL;
-	return output;
-}
-
-//Put a function outside the input equation
-struct EQUATION *makeFunction(unsigned char funcType, struct EQUATION *eq){
-	struct EQUATION *output = doCopy(eq);
-	output->TYPE |= funcType;
-	return output;
-}
-
-//Print equation
 void printEquation(struct EQUATION *eq){
 	int i;
-	if (TYPE_MACRO_FX(eq) != NOT_A_FUNCTION){
-		printf("%s", functionNameList[TYPE_MACRO_FX(eq)-1]);
-		if (TYPE_MACRO_OP(eq) == CONSTANT_TERM || TYPE_MACRO_OP(eq) == VARIABLE_TERM) printf("("); //In operations already bracket is printed, no need to print twice
+	if (eq->TYPE > EXPONENT){
+		printf("%s", functionNameList[eq->TYPE - EXPONENT -1]);
+		if (eq->CHILD->TYPE > EXPONENT || eq->CHILD->TYPE == CONSTANT_TERM || eq->CHILD->TYPE == VARIABLE_TERM) printf("(");
+		printEquation(eq->CHILD);
+		if (eq->CHILD->TYPE > EXPONENT || eq->CHILD->TYPE == CONSTANT_TERM || eq->CHILD->TYPE == VARIABLE_TERM) printf(")");
+		return;
 	}
-	if (TYPE_MACRO_OP(eq) == CONSTANT_TERM){
+	if (eq->TYPE == CONSTANT_TERM){
 		printf("%2.2f", eq->VALUE.CONSTANT_VALUE);
 	}
-	else if (TYPE_MACRO_OP(eq) == VARIABLE_TERM){
+	else if (eq->TYPE == VARIABLE_TERM){
 		printf("%c", eq->VALUE.VARIABLE_NAME);
 	}
-	else if (TYPE_MACRO_OP(eq) == ADD || TYPE_MACRO_OP(eq) == MULTIPLY || TYPE_MACRO_OP(eq) == EXPONENT){
+	else if (eq->TYPE == ADD || eq->TYPE == MULTIPLY || eq->TYPE == EXPONENT){
 		printf("(");
 		char op;
-		switch(TYPE_MACRO_OP(eq)){
+		switch(eq->TYPE){
 			case ADD:
 				op = '+';
 				break;
@@ -744,56 +801,183 @@ void printEquation(struct EQUATION *eq){
 		} while (sis);
 		printf(")");
 	}
-	if (TYPE_MACRO_FX(eq) != NOT_A_FUNCTION && (TYPE_MACRO_OP(eq) == CONSTANT_TERM || TYPE_MACRO_OP(eq) == VARIABLE_TERM)) printf(")");
 }
 
-//Print equation with a new line
 void printEq(struct EQUATION *eq){
 	printEquation(eq);
 	printf("\n");
 }
 
-void formulaGen(){
-	formulaInputList[0] = A(V('a'), V('b'));  //commutative property in addition
-	formulaOutputList[0] = A(V('b'), V('a'));
+void formulaGen(){	
+	formulaInputList[0] = M(V('a'), N(1));
+	formulaOutputList[0] = V('a');
 	
-	formulaInputList[1] = M(V('a'), V('b'));  //commutative property in multiply
-	formulaOutputList[1] = M(V('b'), V('a'));
+	formulaInputList[1] = A(  M(V('a'),  V('b')), V('a')  );
+	formulaOutputList[1] = M(  V('a'),  A(V('b'), N(1))  );
 	
-	formulaInputList[2] = M(V('a'), N(1)); //one can be ignored in multiplication
-	formulaOutputList[2] = V('a');
+	formulaInputList[2] = A(V('a'), V('a'));
+	formulaOutputList[2] = M(N(2), V('a'));
 	
-	formulaInputList[3] = A(  M(V('a'),  V('b')), V('a')  );   //taking common (1)
-	formulaOutputList[3] = M(  V('a'),  A(V('b'), N(1))  );
+	formulaInputList[3] = M(A(V('a'), V('b')), A(V('c'), V('d')));
+	formulaOutputList[3] = A(A(M(V('a'), V('c')), M(V('a'), V('d'))), A( M(V('b'), V('c')), M(V('b'), V('d'))));
 	
-	formulaInputList[4] = A(V('a'), V('a')); // taking common (2)
-	formulaOutputList[4] = M(N(2), V('a'));
+	formulaInputList[4] = M(V('a'), V('a'));
+	formulaOutputList[4] = W(V('a'), N(2));
 	
-	formulaInputList[5] = M(A(V('a'), V('b')), A(V('c'), V('d')));
-	formulaOutputList[5] = A(A(M(V('a'), V('c')), M(V('a'), V('d'))), A( M(V('b'), V('c')), M(V('b'), V('d'))));
+	formulaInputList[5] = A(W(FX(SINE, V('a')), N(2)), W(FX(COSINE, V('a')), N(2)));
+	formulaOutputList[5] = N(1);
 	
-	formulaInputList[6] = M(V('a'), V('a'));
-	formulaOutputList[6] = W(V('a'), N(2));
+	//formulaInputList[6] = W(A(V('a'), V('b')), N(2));
+	//formulaOutputList[6] = A(A(W(V('a'), N(2)), W(V('b'), N(2))), M(N(2), M(V('a'), V('b'))));
+	
+	formulaInputList[6] = FX(COTANGENT, V('a'));
+	formulaOutputList[6] = M(FX(COSINE, V('a')), W(FX(SINE, V('a')), N(-1)));
+	
+	formulaInputList[7] = FX(COSECANT, V('a'));
+	formulaOutputList[7] = W(FX(SINE, V('a')), N(-1));
+	
+	formulaInputList[8] = A(V('a'), M(V('a'), V('b')));
+	formulaOutputList[8] = M(V('a'), A(V('b'), N(1)));
+
+	formulaInputList[9] = A(M(V('b'), V('a')), V('a'));
+	formulaOutputList[9] = M(V('a'), A(N(1), V('b')));
+	
+	formulaInputList[10] = W(FX(SINE, V('a')), N(2));
+	formulaOutputList[10] = A(N(1),M(W(FX(COSINE,V('a')),N(2)),N(-1)));
+	
+	formulaInputList[11] = W(M(V('a'), V('b')),N(2));
+	formulaOutputList[11] = M(W(V('a'),N(2)),W(V('b'),N(2)));
+	
+	formulaInputList[12] = W(W(V('a'),V('b')),V('c'));
+	formulaOutputList[12] = W(W(V('a'),V('c')),V('b'));
+	
+	formulaInputList[13] = A(N(1),M(W(V('a'),N(2)),N(-1)));
+	formulaOutputList[13] = M(A(N(1),V('a')),A(N(1),M(V('a'),N(-1))));
+	
+	formulaInputList[14] = M(W(V('a'),N(2)),W(M(V('a'),V('b')),N(-1)));
+	formulaOutputList[14] = M(V('a'),W(V('b'),N(-1)));
+}
+
+void addOne(int *limitAry, int limitCount, int *output){
+	output[0] += 1;
+	int i;
+	for (i=0; i<limitCount; ++i){
+		if (output[i] == limitAry[i]){
+			output[i+1]++;
+			output[i] = 0;
+		}
+	}
+}
+
+void iterateLimit(int *limitAry, int limitCount, int n, int *output){
+	int i, j;
+	memset(output, 0, sizeof(int)*limitCount);
+	for (i=0; i<n; ++i){
+		addOne(limitAry, limitCount, output);
+	}
+}
+
+int multiplyLimit(int *limitAry, int limitCount){
+	int mul = 1;
+	int i;
+	for (i=0; i<limitCount; ++i){
+		mul *= limitAry[i];
+	}
+	return mul;
+}
+
+void longBracketSetLimit(struct EQUATION *eq, int *limitAry, int *limitCount){
+	int i, j;
+	int count = equationChildCount(eq);
+	if (eq->CHILD) longBracketSetLimit(eq->CHILD, limitAry, limitCount);
+	for (i=1; i<count; ++i){
+		longBracketSetLimit(selectChild_helper(eq, i)->CHILD, limitAry, limitCount);
+	}
+	if (count > 2){
+		int bg[MAX_BRACKET_GROUP];
+		int bgList[MAX_BRACKET_GROUP_LIST_SIZE][MAX_BRACKET_GROUP];
+		for (i=0; i<MAX_BRACKET_GROUP_LIST_SIZE; ++i)
+			for (j=0; j<MAX_BRACKET_GROUP; ++j)
+				bgList[i][j] = 0;
+		int bgListCount = 0;
+		bracketGroupList2(bg, bgList, &bgListCount, count, 1, 0, 0);
+		limitAry[(*limitCount)++] = bgListCount-1;
+	}
+}
+
+struct EQUATION *longBracketReturn(struct EQUATION *eq, int *limitAry, int *nodeCount){
+	int i, j;
+	int count = equationChildCount(eq);
+	if (eq->CHILD) eq->CHILD = longBracketReturn(eq->CHILD, limitAry, nodeCount);
+	for (i=1; i<count; ++i){
+		struct EQUATION_SIS *sis = selectChild_helper(eq, i);
+		sis->CHILD = longBracketReturn(sis->CHILD, limitAry, nodeCount);
+	}
+	if (count > 2){
+		int bg[MAX_BRACKET_GROUP];
+		int bgList[MAX_BRACKET_GROUP_LIST_SIZE][MAX_BRACKET_GROUP];
+		for (i=0; i<MAX_BRACKET_GROUP_LIST_SIZE; ++i)
+			for (j=0; j<MAX_BRACKET_GROUP; ++j)
+				bgList[i][j] = 0;
+		int bgListCount = 0;
+		bracketGroupList2(bg, bgList, &bgListCount, count, 1, 0, 0);
+		int index = limitAry[(*nodeCount)++];
+		for (i=0; bgList[index][i]; ++i){
+			bg[i] = bgList[index][i];
+		}
+		bg[i] = 0;
+		return bracketGrouper_helper(eq, bg);
+	}
+	return eq;
+}
+
+int longBracketGen(struct EQUATION *eq, struct EQUATION *genList[MAX_LONG_BRACKET_GEN_LIST]){
+	int i;
+	int j;
+	int count=0;
+	int limitAry[MAX_LONG_BRACKET];
+	int limitCount = 0;
+	longBracketSetLimit(eq, limitAry, &limitCount);
+	int output[MAX_LONG_BRACKET];
+	int result = multiplyLimit(limitAry, limitCount);
+	for (i=0; i<result; ++i){
+		iterateLimit(limitAry, limitCount, i, output);
+		int nodeCount = 0;
+		genList[count++] = longBracketReturn(doCopy(eq), output, &nodeCount);
+	}
+	return count;
 }
 
 int main(){
-	int i;
-	formulaGen();	
-	struct EQUATION *start = M(A(V('x'), N(1)), A(V('x'), N(2)));
-	struct EQUATION *target = A(A(W(V('x'), N(2)), M(N(3), V('x'))), N(2));
-	target = fixCommutative(target);
+	int i, j;
+	formulaGen();
 	
+	//struct EQUATION *start = M(A(V('x'), N(1)), A(V('x'), N(2)));
+	//struct EQUATION *target = A(A(W(V('x'), N(2)), M(N(3), V('x'))), N(2));
+	
+	struct EQUATION *g3 = A(FX(COSECANT,V('x')),M(FX(COTANGENT,V('x')),N(-1)));
+	struct EQUATION *start = W(g3, N(2));
+	struct EQUATION *g1 = A(N(1),M(FX(COSINE,(V('x'))),N(-1)));
+	struct EQUATION *g4 = FX(COSINE, V('x'));
+	struct EQUATION *g2 = M(A(N(1),g4),A(N(1),M(g4,N(-1))));
+	struct EQUATION *target = M(A(N(1),M(g4,N(-1))),W(A(N(1),g4),N(-1)));
+	
+	target = fixCommutative(target);
 	printf("Start: ");
 	printEq(start);
 	printf("Target: ");
 	printEq(target);
 	printf("\n");
-	
+	clock_t t;
+    t = clock();
 	struct MATH_STEP *output = search(start, target);
+	t = clock() - t;
+	double time_taken = ((double)t)/CLOCKS_PER_SEC; // in seconds
+	printf("The search took %f seconds\n\n", time_taken);
 	while (output){
 		printEq(output->DATA);
 		output = output->PARENT;
 	}
-	
+	printf("\n");
 	return 0;
 }
