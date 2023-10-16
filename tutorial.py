@@ -1,4 +1,5 @@
 import copy
+import sys
 from functools import cmp_to_key
 
 FUNCTION_COUNT = 16
@@ -987,9 +988,13 @@ def search(f_input, f_output, equation):
 '''
 
 fl = formula_function()
-eq = string_to_equation_short("inf(1)+inf(2x+1)inf(x+2)")
-#eq = string_to_equation_short("inf(sin(x)^4-cos(x)^4)")
-#eq = string_to_equation_short("inf(int((m+m)dif(m)))")
+cmp_var = int(sys.argv[1])
+if cmp_var == 1:
+    eq = string_to_equation_short("inf(int((m+m)dif(m)))")
+elif cmp_var == 2:
+    eq = string_to_equation_short("inf(1)+inf(2x+1)inf(x+2)")
+elif cmp_var == 3:
+    eq = string_to_equation_short("inf(sin(x)^4-cos(x)^4)")
 while True:
     #print(check_inf_structure(eq))
     print_equation(eq)
